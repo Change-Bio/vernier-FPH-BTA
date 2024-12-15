@@ -10,17 +10,15 @@ from pioreactor.background_jobs.leader.mqtt_to_db_streaming import produce_metad
 from pioreactor.background_jobs.leader.mqtt_to_db_streaming import register_source_to_sink
 from pioreactor.background_jobs.leader.mqtt_to_db_streaming import TopicToParserToTable
 from pioreactor.utils import timing
+from pioreactor.pubsub import QOS
+from pioreactor.types import MQTTMessage
+from pioreactor.config import config
 
 __plugin_summary__ = "Reads pH from Vernier FPH-BTA probe"
 __plugin_version__ = "0.0.2"
 __plugin_name__ = "Vernier FPH-BTA"
 __plugin_author__ = "Noah Sprent"
 __plugin_homepage__ = "https://github.com/noahsprent/vernier-FPH-BTA"
-
-# Serial port settings
-serial_port = '/dev/ttyACM0'
-baud_rate = 9600
-
 
 def __dir__():
     return ['click_read_ph']
@@ -49,46 +47,38 @@ class ReadPh(BackgroundJob):
     job_name="vernier_fph_bta"
     published_settings = {
         "ph_reading": {"datatype": "float", "settable": False},
-        "pin": {"datatype": "string", "settable": True},
+        "pin": {"datatype": "string", "settable": False},
         "slope": {"datatype": "float", "settable": True},
         "intercept": {"datatype": "float", "settable": True},
     }
 
     def __init__(self, unit, experiment, **kwargs):
         super().__init__(unit=unit, experiment=experiment)
-        time_between_readings = 4 
-        assert time_between_readings >= 2.0
 
-        self.pin = "A2"
-        self.slope = -7.78
-        self.intercept = 16.34
+        self.pin = config.get("fph_bta.config", "pin")
+        self.slope = config.getfloat("fph_bta.config", "slope")
+        self.intercept = config.getfloat("fph_bta.config", "intercept")
         
-        self.timer_thread = RepeatedTimer(time_between_readings, self.read_pH, job_name=self.job_name, run_immediately=True).start()
+        self.start_reading_ph()     
 
     def on_ready(self):
-        self.logger.debug(f"Listening on {serial_port}...")
+        self.logger.debug(f"Reading pH from {self.pin} from MQTT...")
 
     def on_disconnected(self):
-        self.logger.debug(f"Disconnecting from {serial_port}")
+        self.logger.debug(f"No longer reading pH from MQTT")
 
-    def read_pH(self):
-        with serial.Serial(serial_port, baud_rate, timeout=1) as ser:
-            buffer = ''
-            while True:
-                line = ser.readline().decode('utf-8').strip()
-                try:
-                    data = json.loads(line)
-                    samples = 2
-                    running_sum = 0.0
-                    for _ in range(samples):
-                        running_sum += data[self.pin]
-                        sleep(0.05)
-                        current_timeout = 1.5
-                        sleep(current_timeout)
-                    self.ph_reading = (running_sum/samples)*self.slope + self.intercept
-                    return self.ph_reading
-                except json.JSONDecodeError:
-                    sleep(1)
+    def start_reading_ph(self) -> None:
+        self.subscribe_and_callback(
+            callback = self.read_ph,
+            subscriptions = f"pioreactor/{self.unit}/+/pioreactor_read_serial/{self.pin}",
+            qos=QOS.AT_LEAST_ONCE,
+        )
+
+    def read_ph(self, reading_message: MQTTMessage) -> None:
+        value = reading_message.payload
+        float_value = float(value.decode('utf-8'))
+        self.ph_reading = float_value*self.slope + self.intercept
+        return self.ph_reading
 
 @click.command(name="vernier_fph_bta", help=__plugin_summary__)
 def click_read_ph():
