@@ -8,8 +8,8 @@ source: app
 payload_key: # (Optional) If the MQTT topic is json blobs, use the payload_key to retrieve the data from the blob, string.
 y_axis_label: pH # the y-axis label, string
 interpolation: stepAfter # (Optional) the interpolation to use between points, default is stepAfter, string.
-y_axis_domain: [0,14] # (Optional) specify a starting y-axis domain. Must be an array, like [0.0, 0.5].
+y_axis_domain: [1,8] # (Optional) specify a starting y-axis domain. Must be an array, like [0.0, 0.5].
 y_transformation: # (Optional) an inline JS function to transform the y data. Default is the identity function, string.
 lookback: 10000 # Not described in docs
 fixed_decimals: 1 # How many decimals to display, integer.
-down_sample: false # (Optional) A boolean to down-sample the data points from the server or not.
+down_sample: true # (Optional) A boolean to down-sample the data points from the server or not.
