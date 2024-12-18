@@ -1,2 +1,0 @@
-[pioreactor.plugins]
-vernier_fph_bta = vernier_fph_bta
