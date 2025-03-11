@@ -13,15 +13,12 @@ from pioreactor.utils import timing
 from pioreactor.pubsub import QOS
 from pioreactor.types import MQTTMessage
 from pioreactor.config import config
-from pioreactor.plugin_management import get_plugins
-from pioreactor.calibrations import load_active_calibration
 
 __plugin_summary__ = "Reads pH from Vernier FPH-BTA probe"
 __plugin_version__ = "0.0.2"
 __plugin_name__ = "Vernier FPH-BTA"
 __plugin_author__ = "Noah Sprent"
 __plugin_homepage__ = "https://github.com/noahsprent/vernier-FPH-BTA"
-
 
 def __dir__():
     return ['click_read_ph']
@@ -50,18 +47,17 @@ class ReadPh(BackgroundJob):
     job_name="vernier_fph_bta"
     published_settings = {
         "ph_reading": {"datatype": "float", "settable": False},
-        "pin": {"datatype": "string", "settable": True},
-        "slope": {"datatype": "float", "settable": False},
-        "intercept": {"datatype": "float", "settable": False},
+        "pin": {"datatype": "string", "settable": False},
+        "slope": {"datatype": "float", "settable": True},
+        "intercept": {"datatype": "float", "settable": True},
     }
 
     def __init__(self, unit, experiment, **kwargs):
         super().__init__(unit=unit, experiment=experiment)
 
-        ph_calibration = get_plugins()["ph_calibration"].module.PHCalibration # we need to create this subclass here in order for load_active_calibration to work
-        self.ph_cal = load_active_calibration("ph_probe")
-
         self.pin = config.get("fph_bta.config", "pin")
+        self.slope = config.getfloat("fph_bta.config", "slope")
+        self.intercept = config.getfloat("fph_bta.config", "intercept")
         
         self.start_reading_ph()     
 
@@ -81,7 +77,7 @@ class ReadPh(BackgroundJob):
     def read_ph(self, reading_message: MQTTMessage) -> None:
         value = reading_message.payload
         float_value = float(value.decode('utf-8'))
-        self.ph_reading = self.ph_cal.y_to_x(float_value) 
+        self.ph_reading = float_value*self.slope + self.intercept
         return self.ph_reading
 
 @click.command(name="vernier_fph_bta", help=__plugin_summary__)
